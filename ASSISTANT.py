@@ -140,20 +140,49 @@ def chat_with_ai(prompt, face):
 # ========== ACTION FUNCTIONS ==========
 
 def shutdown_computer(face):
-    """Shuts down the computer after confirmation."""
-    speak("Are you sure you want to shut down?", face)
-    confirmation = listen(5)
-    if confirmation and "yes" in confirmation:
-        speak("Shutting down. Goodbye!", face)
-        if os.name == 'nt':
-            os.system('shutdown /s /t 1')
-        else:
-            os.system('sudo shutdown now')
-        return True
-    else:
-        speak("Shutdown cancelled.", face)
-        return False
+    """Safely shuts down the computer after confirmation.
 
+    Args:
+        face: The GUI face object for visual feedback
+
+    Returns:
+        bool: True if shutdown was initiated, False if cancelled
+    """
+    try:
+        # Ask for confirmation
+        speak("Are you sure you want to shut down the computer? Say 'yes' to confirm.", face)
+        face.update_expression("processing")
+
+        # Listen for confirmation with 7 second timeout
+        confirmation = listen(7)
+
+        if confirmation and any(word in confirmation for word in ["yes", "confirm", "shutdown"]):
+            speak("Initiating shutdown. Goodbye!", face)
+            face.update_expression("neutral")
+
+            # Platform-specific shutdown commands
+            if os.name == 'nt':  # Windows
+                os.system('shutdown /s /t 1')
+            elif os.name == 'posix':  # Linux/Mac
+                if os.geteuid() == 0:  # If already root
+                    os.system('shutdown now')
+                else:
+                    os.system('sudo shutdown now')
+            else:
+                raise OSError("Unsupported operating system")
+
+            return True
+        else:
+            speak("Shutdown cancelled.", face)
+            face.update_expression("neutral")
+            return False
+
+    except Exception as e:
+        error_msg = f"Shutdown failed: {str(e)}"
+        print(error_msg)
+        speak("I couldn't complete the shutdown.", face)
+        face.update_expression("error")
+        return False
 
 def open_application(command, face):
     """Parses command to open an application."""
