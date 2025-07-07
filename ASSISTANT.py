@@ -26,7 +26,7 @@ except ImportError as e:
         exit()
 
 # ========== CONFIGURATION ==========
-API_KEY = os.environ.get("OPENROUTER_API_KEY", " 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")
+API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 HEADERS = {
