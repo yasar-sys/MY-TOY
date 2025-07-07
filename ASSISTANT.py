@@ -308,7 +308,7 @@ def get_weather(city):
 # ========== VIRTUAL FACE CLASS ==========
 
 class JarvisFace:
-    """A sci-fi skull face for Jarvis using Tkinter."""
+    """A simple 2D cyber sci-fi face for Jarvis using Tkinter."""
 
     def __init__(self):
         self.expression = "neutral"
@@ -316,7 +316,6 @@ class JarvisFace:
         self.root = None
 
     def run(self):
-        """Creates and runs the Tkinter window in the main GUI thread."""
         self.root = tk.Tk()
         self.root.title("Jarvis")
         self.root.geometry("320x340")
@@ -325,78 +324,55 @@ class JarvisFace:
         self.canvas = tk.Canvas(self.root, width=320, height=340, bg='black', highlightthickness=0)
         self.canvas.pack()
 
-        # Skull outline
-        self.skull = self.canvas.create_oval(60, 40, 260, 300, fill='#e0e0e0', outline='#bbbbbb', width=5)
-        # Jaw
-        self.jaw = self.canvas.create_arc(90, 200, 230, 340, start=0, extent=180, style=tk.CHORD, fill='#e0e0e0', outline='#bbbbbb', width=5)
+        # Face outline (cyber style)
+        self.face_oval = self.canvas.create_oval(40, 40, 280, 300, fill='#181f2a', outline='#00ffff', width=3)
 
-        # Eyes (hollow, glowing)
-        self.eye_left = self.canvas.create_oval(110, 120, 145, 170, fill='#222', outline='#00eaff', width=3)
-        self.eye_right = self.canvas.create_oval(175, 120, 210, 170, fill='#222', outline='#00eaff', width=3)
+        # Eyes (glowing blue)
+        self.eye_left = self.canvas.create_oval(100, 120, 140, 160, fill='#00eaff', outline='#b3f0ff', width=3)
+        self.eye_right = self.canvas.create_oval(180, 120, 220, 160, fill='#00eaff', outline='#b3f0ff', width=3)
 
-        # Nose cavity (triangle)
-        self.nose = self.canvas.create_polygon(150, 170, 170, 170, 160, 200, fill='#222', outline='#888', width=2)
+        # Futuristic mouth (simple arc)
+        self.mouth = self.canvas.create_arc(120, 200, 200, 260, start=200, extent=140, style=tk.ARC, outline='#00eaff', width=4)
 
-        # Teeth (vertical lines)
-        self.teeth = []
-        for x in range(125, 200, 15):
-            t = self.canvas.create_line(x, 270, x, 310, fill='#888', width=2)
-            self.teeth.append(t)
-
-        self.mouth = self.canvas.create_line(120, 270, 200, 270, fill='#888', width=3)
+        # Cheek lights (small glowing dots)
+        self.cheek_left = self.canvas.create_oval(85, 180, 95, 190, fill='#00eaff', outline='')
+        self.cheek_right = self.canvas.create_oval(225, 180, 235, 190, fill='#00eaff', outline='')
 
         self._animate()
         self.root.mainloop()
 
     def update_expression(self, expr):
-        """Updates the current visual mode (expression)."""
         self.expression = expr
         print(f"[Face Updated: {self.expression.upper()}]")
 
     def _animate(self):
-        """The main animation loop, called every 50ms."""
         # Eyes: animate color for different expressions
         if self.expression == "listening":
-            self.canvas.itemconfig(self.eye_left, outline='#00ffff')
-            self.canvas.itemconfig(self.eye_right, outline='#00ffff')
+            self.canvas.itemconfig(self.eye_left, fill='#00ffff')
+            self.canvas.itemconfig(self.eye_right, fill='#00ffff')
         elif self.expression == "processing":
-            self.canvas.itemconfig(self.eye_left, outline='#ffff00')
-            self.canvas.itemconfig(self.eye_right, outline='#ffff00')
+            self.canvas.itemconfig(self.eye_left, fill='#ffff00')
+            self.canvas.itemconfig(self.eye_right, fill='#ffff00')
         elif self.expression == "error":
-            self.canvas.itemconfig(self.eye_left, outline='#ff3333')
-            self.canvas.itemconfig(self.eye_right, outline='#ff3333')
+            self.canvas.itemconfig(self.eye_left, fill='#ff3333')
+            self.canvas.itemconfig(self.eye_right, fill='#ff3333')
         else:  # Neutral
-            self.canvas.itemconfig(self.eye_left, outline='#00eaff')
-            self.canvas.itemconfig(self.eye_right, outline='#00eaff')
+            self.canvas.itemconfig(self.eye_left, fill='#00eaff')
+            self.canvas.itemconfig(self.eye_right, fill='#00eaff')
 
-        # Jaw/mouth animation for talking
+        # Mouth: animate for talking or change shape for error
         if self.is_talking:
             y_offset = 10 * (1 + abs(time.time() % 0.5 - 0.25) * 2)
-            self.canvas.coords(self.mouth, 120, 270 + y_offset, 200, 270 + y_offset)
-            for i, x in enumerate(range(125, 200, 15)):
-                self.canvas.coords(self.teeth[i], x, 270 + y_offset, x, 310 + y_offset)
+            self.canvas.coords(self.mouth, 120, 200 + y_offset, 200, 260 + y_offset)
         elif self.expression == "error":
-            # Frown (curve mouth downward)
-            self.canvas.coords(self.mouth, 130, 280, 190, 260)
-            for i, x in enumerate(range(125, 200, 15)):
-                self.canvas.coords(self.teeth[i], x, 280, x, 310)
+            self.canvas.coords(self.mouth, 130, 250, 190, 210)
         elif self.expression == "listening":
-            # Slight smile
-            self.canvas.coords(self.mouth, 120, 265, 200, 275)
-            for i, x in enumerate(range(125, 200, 15)):
-                self.canvas.coords(self.teeth[i], x, 265, x, 310)
+            self.canvas.coords(self.mouth, 120, 220, 200, 250)
         elif self.expression == "processing":
-            # Straight mouth
-            self.canvas.coords(self.mouth, 120, 270, 200, 270)
-            for i, x in enumerate(range(125, 200, 15)):
-                self.canvas.coords(self.teeth[i], x, 270, x, 310)
+            self.canvas.coords(self.mouth, 130, 240, 190, 240)
         else:
-            # Default
-            self.canvas.coords(self.mouth, 120, 270, 200, 270)
-            for i, x in enumerate(range(125, 200, 15)):
-                self.canvas.coords(self.teeth[i], x, 270, x, 310)
+            self.canvas.coords(self.mouth, 120, 200, 200, 260)
 
-        # Schedule the next animation frame
         if self.root:
             self.root.after(50, self._animate)
 
