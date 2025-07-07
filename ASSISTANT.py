@@ -9,6 +9,9 @@ import json
 import webbrowser
 from datetime import datetime
 import tkinter as tk
+import pywhatkit  # Add this import at the top with other imports
+import random  # At the top
+import psutil  # At the top (pip install psutil)
 
 # Attempt to import optional packages for full functionality
 try:
@@ -44,6 +47,12 @@ OPEN_APP_COMMANDS = ["open", "launch", "start"]
 SEARCH_COMMANDS = ["search", "google", "look up"]
 PLAY_COMMANDS = ["play", "stream"]
 NOTE_COMMANDS = ["note", "make a note", "remember this"]
+
+JOKES = [
+    "Why did the computer show up at work late? It had a hard drive.",
+    "Why do programmers prefer dark mode? Because light attracts bugs.",
+    "Why did the programmer quit his job? Because he didn't get arrays."
+]
 
 # ========== CORE FUNCTIONS ==========
 
@@ -109,31 +118,44 @@ def clean_response(text):
     return ' '.join(text.split())
 
 
-def chat_with_ai(prompt, face):
-    """Communicate with AI, updating face expression."""
-    if API_KEY == "sk-or-v1-YOUR-API-KEY-HERE":
-        return "The AI service is not configured. Please set your OpenRouter API key."
-
-    face.update_expression("processing")
+def chat_with_ai(prompt, face=None):
+    """Communicate with AI, updating face expression if provided."""
     models_to_try = [
-        "openai/gpt-3.5-turbo", "google/gemini-pro",
-        "anthropic/claude-3-haiku", "meta-llama/llama-3-8b-instruct"
+        "openai/gpt-3.5-turbo",
+        "mistralai/mistral-7b-instruct",
+        "google/gemini-pro",
+        "meta-llama/llama-3-70b-instruct"
     ]
+
+    if face:
+        face.update_expression("processing")
 
     for model in models_to_try:
         try:
-            data = {"model": model, "messages": [
-                {"role": "system", "content": "You are Jarvis, an intelligent, concise, and helpful AI assistant."},
-                {"role": "user", "content": prompt}]}
-            response = requests.post(API_URL, headers=HEADERS, json=data, timeout=15)
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are Jarvis, an intelligent AI assistant. Respond helpfully."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7
+            }
 
-            if response.status_code == 200 and response.json().get("choices"):
-                return clean_response(response.json()["choices"][0]["message"]["content"])
+            response = requests.post(API_URL, headers=HEADERS, json=data, timeout=10)
+
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and result["choices"]:
+                    raw_answer = result["choices"][0]["message"]["content"]
+                    print("🧠 AI Raw Response:", raw_answer)
+                    return raw_answer
             else:
                 print(f"⚠️ Model {model} failed: {response.status_code} - {response.text}")
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Connection error with {model}: {e}")
+        except Exception as e:
+            print(f"❌ Error with model {model}: {e}")
 
+    if face:
+        face.update_expression("error")
     return "Sorry, I couldn't connect to any AI services at the moment."
 
 
@@ -185,19 +207,23 @@ def shutdown_computer(face):
         return False
 
 def open_application(command, face):
-    """Parses command to open an application."""
+    """Parses command to open an application, folder, or file."""
     app_name = re.sub(r'\b(?:' + '|'.join(OPEN_APP_COMMANDS) + r')\b', '', command).replace("app", "").strip()
     if not app_name:
-        speak("Which application should I open?", face)
+        speak("Which application or folder should I open?", face)
         return
     try:
         speak(f"Opening {app_name}.", face)
         if os.name == 'nt':
-            os.startfile(app_name)
+            # Try to open as folder/file first
+            if os.path.exists(app_name):
+                os.startfile(app_name)
+            else:
+                os.startfile(app_name)  # Will try as app name
         elif 'darwin' in os.sys.platform:
-            subprocess.Popen(['open', '-a', app_name])
+            subprocess.Popen(['open', app_name])
         else:
-            subprocess.Popen([app_name])
+            subprocess.Popen(['xdg-open', app_name])
     except Exception as e:
         speak(f"Sorry, I couldn't open {app_name}. Error: {e}", face)
 
@@ -206,8 +232,12 @@ def search_google(command, face):
     """Search Google with the given query."""
     query = re.sub(r'\b(?:' + '|'.join(SEARCH_COMMANDS) + r')\b', '', command).strip()
     if query:
-        webbrowser.open(f"https://www.google.com/search?q={query.replace(' ', '+')}")
-        speak(f"Here are the search results for {query}", face)
+        url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+        try:
+            webbrowser.open(url)
+            speak(f"Here are the search results for {query}", face)
+        except Exception as e:
+            speak(f"Could not open browser: {e}", face)
     else:
         speak("What should I search for?", face)
 
@@ -260,10 +290,25 @@ def make_note(command, face):
         speak("I didn't hear anything to note down.", face)
 
 
+def get_weather(city):
+    api_key = "your_openweathermap_api_key"  # Replace with your real API key
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+    try:
+        response = requests.get(url)
+        data = response.json()
+        if data["cod"] != 200:
+            return "City not found."
+        weather = data["weather"][0]["description"]
+        temp = data["main"]["temp"]
+        return f"The current weather in {city} is {weather} with temperature {temp}°C."
+    except Exception as e:
+        return "Sorry, I couldn't fetch the weather right now."
+
+
 # ========== VIRTUAL FACE CLASS ==========
 
 class JarvisFace:
-    """Manages the graphical, animated face for Jarvis using Tkinter."""
+    """A sci-fi skull face for Jarvis using Tkinter."""
 
     def __init__(self):
         self.expression = "neutral"
@@ -274,16 +319,31 @@ class JarvisFace:
         """Creates and runs the Tkinter window in the main GUI thread."""
         self.root = tk.Tk()
         self.root.title("Jarvis")
-        self.root.geometry("300x300")
+        self.root.geometry("320x340")
         self.root.configure(bg='black')
 
-        self.canvas = tk.Canvas(self.root, width=300, height=300, bg='black', highlightthickness=0)
+        self.canvas = tk.Canvas(self.root, width=320, height=340, bg='black', highlightthickness=0)
         self.canvas.pack()
 
-        # Create face elements
-        self.eye_left = self.canvas.create_oval(80, 100, 120, 140, fill='cyan', outline='white')
-        self.eye_right = self.canvas.create_oval(180, 100, 220, 140, fill='cyan', outline='white')
-        self.mouth = self.canvas.create_line(120, 200, 180, 200, fill='cyan', width=5)
+        # Skull outline
+        self.skull = self.canvas.create_oval(60, 40, 260, 300, fill='#e0e0e0', outline='#bbbbbb', width=5)
+        # Jaw
+        self.jaw = self.canvas.create_arc(90, 200, 230, 340, start=0, extent=180, style=tk.CHORD, fill='#e0e0e0', outline='#bbbbbb', width=5)
+
+        # Eyes (hollow, glowing)
+        self.eye_left = self.canvas.create_oval(110, 120, 145, 170, fill='#222', outline='#00eaff', width=3)
+        self.eye_right = self.canvas.create_oval(175, 120, 210, 170, fill='#222', outline='#00eaff', width=3)
+
+        # Nose cavity (triangle)
+        self.nose = self.canvas.create_polygon(150, 170, 170, 170, 160, 200, fill='#222', outline='#888', width=2)
+
+        # Teeth (vertical lines)
+        self.teeth = []
+        for x in range(125, 200, 15):
+            t = self.canvas.create_line(x, 270, x, 310, fill='#888', width=2)
+            self.teeth.append(t)
+
+        self.mouth = self.canvas.create_line(120, 270, 200, 270, fill='#888', width=3)
 
         self._animate()
         self.root.mainloop()
@@ -294,27 +354,47 @@ class JarvisFace:
         print(f"[Face Updated: {self.expression.upper()}]")
 
     def _animate(self):
-        """The main animation loop, called every 100ms."""
+        """The main animation loop, called every 50ms."""
+        # Eyes: animate color for different expressions
+        if self.expression == "listening":
+            self.canvas.itemconfig(self.eye_left, outline='#00ffff')
+            self.canvas.itemconfig(self.eye_right, outline='#00ffff')
+        elif self.expression == "processing":
+            self.canvas.itemconfig(self.eye_left, outline='#ffff00')
+            self.canvas.itemconfig(self.eye_right, outline='#ffff00')
+        elif self.expression == "error":
+            self.canvas.itemconfig(self.eye_left, outline='#ff3333')
+            self.canvas.itemconfig(self.eye_right, outline='#ff3333')
+        else:  # Neutral
+            self.canvas.itemconfig(self.eye_left, outline='#00eaff')
+            self.canvas.itemconfig(self.eye_right, outline='#00eaff')
+
+        # Jaw/mouth animation for talking
         if self.is_talking:
-            # Simple talking animation: open and close mouth
-            y_pos = 200 + (time.time() * 20) % 1 * 15  # Move mouth up and down
-            self.canvas.coords(self.mouth, 130, 190, 170, y_pos)
+            y_offset = 10 * (1 + abs(time.time() % 0.5 - 0.25) * 2)
+            self.canvas.coords(self.mouth, 120, 270 + y_offset, 200, 270 + y_offset)
+            for i, x in enumerate(range(125, 200, 15)):
+                self.canvas.coords(self.teeth[i], x, 270 + y_offset, x, 310 + y_offset)
+        elif self.expression == "error":
+            # Frown (curve mouth downward)
+            self.canvas.coords(self.mouth, 130, 280, 190, 260)
+            for i, x in enumerate(range(125, 200, 15)):
+                self.canvas.coords(self.teeth[i], x, 280, x, 310)
+        elif self.expression == "listening":
+            # Slight smile
+            self.canvas.coords(self.mouth, 120, 265, 200, 275)
+            for i, x in enumerate(range(125, 200, 15)):
+                self.canvas.coords(self.teeth[i], x, 265, x, 310)
+        elif self.expression == "processing":
+            # Straight mouth
+            self.canvas.coords(self.mouth, 120, 270, 200, 270)
+            for i, x in enumerate(range(125, 200, 15)):
+                self.canvas.coords(self.teeth[i], x, 270, x, 310)
         else:
-            if self.expression == "listening":
-                self.canvas.itemconfig(self.eye_left, fill='deep sky blue')
-                self.canvas.itemconfig(self.eye_right, fill='deep sky blue')
-                self.canvas.coords(self.mouth, 120, 200, 180, 200)
-            elif self.expression == "processing":
-                self.canvas.itemconfig(self.eye_left, fill='yellow')
-                self.canvas.itemconfig(self.eye_right, fill='yellow')
-            elif self.expression == "error":
-                self.canvas.itemconfig(self.eye_left, fill='red')
-                self.canvas.itemconfig(self.eye_right, fill='red')
-                self.canvas.coords(self.mouth, 120, 210, 180, 190)  # Frown
-            else:  # Neutral
-                self.canvas.itemconfig(self.eye_left, fill='cyan')
-                self.canvas.itemconfig(self.eye_right, fill='cyan')
-                self.canvas.coords(self.mouth, 120, 200, 180, 200)
+            # Default
+            self.canvas.coords(self.mouth, 120, 270, 200, 270)
+            for i, x in enumerate(range(125, 200, 15)):
+                self.canvas.coords(self.teeth[i], x, 270, x, 310)
 
         # Schedule the next animation frame
         if self.root:
@@ -328,21 +408,55 @@ def process_command(command, face):
     if not command:
         return False
 
-    if any(word in command for word in EXIT_COMMANDS):
+    command_lower = command.lower()
+
+    if any(word in command_lower for word in EXIT_COMMANDS):
         speak("Goodbye! Have a nice day.", face)
         return True
-    elif any(word in command for word in SHUTDOWN_COMMANDS):
+    elif any(word in command_lower for word in SHUTDOWN_COMMANDS):
         return shutdown_computer(face)
-    elif any(word in command for word in OPEN_APP_COMMANDS):
+    elif any(word in command_lower for word in OPEN_APP_COMMANDS):
         open_application(command, face)
-    elif any(word in command for word in SEARCH_COMMANDS):
+    elif any(word in command_lower for word in SEARCH_COMMANDS):
         search_google(command, face)
-    elif any(word in command for word in PLAY_COMMANDS):
+    elif any(word in command_lower for word in PLAY_COMMANDS):
         play_youtube_video(command, face)
-    elif any(word in command for word in NOTE_COMMANDS):
+    elif any(word in command_lower for word in NOTE_COMMANDS):
         make_note(command, face)
-    elif "screenshot" in command:
+    elif "screenshot" in command_lower:
         take_screenshot(face)
+    elif "search for" in command_lower or "google" in command_lower:
+        search_query = command_lower.replace("search for", "").replace("google", "").strip()
+        if not search_query:
+            speak("What should I search for?", face)
+            search_query = listen()
+        if search_query:
+            speak("Searching on Google...", face)
+            pywhatkit.search(search_query)
+    elif "time" in command_lower:
+        now = datetime.now().strftime("%I:%M %p")
+        speak(f"The current time is {now}.", face)
+    elif "date" in command_lower:
+        today = datetime.now().strftime("%A, %B %d, %Y")
+        speak(f"Today is {today}.", face)
+    elif "joke" in command_lower:
+        joke = random.choice(JOKES)
+        speak(joke, face)
+    elif "battery" in command_lower:
+        battery = psutil.sensors_battery()
+        if battery:
+            percent = battery.percent
+            plugged = "plugged in" if battery.power_plugged else "not plugged in"
+            speak(f"Battery is at {percent} percent and is {plugged}.", face)
+        else:
+            speak("Couldn't get battery information.", face)
+    elif "calculate" in command_lower:
+        expr = command_lower.replace("calculate", "").strip()
+        try:
+            result = eval(expr)
+            speak(f"The result is {result}", face)
+        except Exception:
+            speak("Sorry, I couldn't calculate that.", face)
     else:
         response = chat_with_ai(command, face)
         speak(response, face)
@@ -390,4 +504,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print("Loaded API KEY:", API_KEY)
     main()
